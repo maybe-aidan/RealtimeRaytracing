@@ -22,10 +22,13 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 
 ## 📸 Showcase  
 
-| Glass & Refraction | BVH Triangle Mesh | Skybox Environment | Gamma-Correction | Np Gamma-Correction |
-|--------------------|-------------------|--------------------|------------------|---------------------|
-| ![](screenshots/Realtime_image1.png) | ![](screenshots/no_gamma.png) | ![](screenshots/skybox_render2.png) | ![](screenshots/gamma_correction.png) | ![](screenshots/no_gamma.png) |
+| Glass & Refraction | BVH Triangle Mesh | Skybox Environment | 
+|--------------------|-------------------|--------------------|
+| ![](screenshots/Realtime_image1.png) | ![](screenshots/no_gamma.png) | ![](screenshots/skybox_render2.png) |
 
+| Gamma-Correction | No Gamma-Correction |
+|------------------|---------------------|
+| ![](screenshots/gamma_correction.png) | ![](screenshots/no_gamma.png) |
 ---
 
 ## 🛠️ Build Instructions  
