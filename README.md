@@ -4,6 +4,8 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 
 **Author**: Aidan Fox  
 
+![](screenshots/gamma_corrected_mirror_monkey.png)
+
 ---
 
 ## 🚀 Features  
@@ -20,9 +22,9 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 
 ## 📸 Showcase  
 
-| Glass & Refraction | BVH Triangle Mesh | Skybox Environment |  Gamma-Correction |
-|--------------------|------------------|--------------------|-------------------|
-| ![](screenshots/glass.png) | ![](screenshots/mesh.png) | ![](screenshots/skybox.png) | ![](screenshots/skybox.png) |
+| Glass & Refraction | BVH Triangle Mesh | Skybox Environment | Gamma-Correction | Np Gamma-Correction |
+|--------------------|-------------------|--------------------|------------------|---------------------|
+| ![](screenshots/Realtime_image1.png) | ![](screenshots/no_gamma.png) | ![](screenshots/skybox_render2.png) | ![](screenshots/gamma_correction.png) | ![](screenshots/no_gamma.png) |
 
 ---
 
