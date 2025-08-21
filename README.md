@@ -15,8 +15,9 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 - **Progressive ray accumulation** – Accumulates samples across frames for smooth noise reduction.  
 - **Multiple primitives** – Supports spheres and triangle meshes.  
 - **Skybox rendering** – Environment lighting with cubemaps.  
-- **Material system** – Lambertian (diffuse), Metal, Dielectric (glass), and Emissive materials supported.  
-- **Educational focus** – Inspired by *Ray Tracing in One Weekend*, extended to real-time GPU rendering.  
+- **Material system** – Lambertian (diffuse), Metal, Dielectric (glass), and Emissive materials supported.
+- **Interactive GUI** - Realtime mesh position, rotation, and scale control using ImGui.  
+- **Educational focus** – Inspired by *Ray Tracing in One Weekend*, extended to real-time GPU rendering.
 
 ---
 
@@ -52,7 +53,8 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
   - [GLFW](https://www.glfw.org/)  
   - [GLAD](https://glad.dav1d.de/) (OpenGL 4.6 core)  [Alternate Link](https://gen.glad.sh/)
   - [Assimp](https://github.com/assimp/assimp) (mesh loading)  
-  - [stb_image](https://github.com/nothings/stb) (image loading)  
+  - [stb_image](https://github.com/nothings/stb) (image loading)
+  - [ImGui](https://github.com/ocornut/imgui) (interactive GUI)
 
 ### Setup  
 1. Clone this repository.  
