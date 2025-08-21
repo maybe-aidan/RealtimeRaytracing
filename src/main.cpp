@@ -129,23 +129,47 @@ int main() {
 		Material{1.0, 1.0, 1.0, 0.0, MaterialType::Dielectric, 0.0, 0.0,  1.5}, // Glass
 		Material{1.0, 0.8, 1.0, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
 		Material{0.7, 0.7, 0.7, 0.0, MaterialType::Metal,      0.0, 0.5,  0.0},
-		Material{0.8, 0.6, 0.2, 0.0, MaterialType::Metal,      0.0, 0.00, 0.0}, // Brass
-		Material{0.8, 0.6, 0.8, 0.0, MaterialType::Metal,      0.0, 0.0,  0.0}
+		Material{0.8, 0.6, 0.2, 0.0, MaterialType::Metal,      0.0, 0.0,  0.0}, // Brass
+		Material{0.6, 0.6, 0.6, 0.0, MaterialType::Metal,      0.0, 0.0,  0.0}	// Iron(?)
 	}; // Note: albedo.w is for memory alignment, and is unused in the shader.
 
 	// Load mesh and create triangles
 	std::vector<Triangle> allTriangles;
 
-	// Load mesh
+	// Load meshes
+
+	// Bunny
 	try {
-		rt_Mesh mesh("external/smooth-bunny.obj", 7); // path, material ID (index in mats)
+		rt_Mesh mesh("external/smooth-bunny.obj", 8); // path, material ID (index in mats)
 
 		// Transform the mesh
 		glm::mat4 transform = glm::mat4(1.0f);
 		transform = glm::translate(transform, glm::vec3(2.0f, -0.65f, -1.0f));
 		transform = glm::rotate(transform, 3.0f * 3.14f / 4.0f, glm::vec3(0, 1, 0));
-		//transform = glm::rotate(transform, -3.14f/4.0f, glm::vec3(1, 0, 0));
 		transform = glm::scale(transform, glm::vec3(5.0f));
+		mesh.transform(transform);
+
+		// Add mesh triangles to the triangle list
+		const auto& meshTriangles = mesh.getTriangles();
+		allTriangles.insert(allTriangles.end(), meshTriangles.begin(), meshTriangles.end());
+
+		// Debug stuff
+		std::cout << "Loaded mesh with " << meshTriangles.size() << " triangles" << std::endl;
+	}
+	catch (const std::exception& e) {
+		std::cout << "Failed to load mesh: " << e.what() << std::endl;
+	}
+
+	// Monkey
+	try {
+		rt_Mesh mesh("external/smooth-monkey.obj", 7); // path, material ID (index in mats)
+
+		// Transform the mesh
+		glm::mat4 transform = glm::mat4(1.0f);
+		transform = glm::translate(transform, glm::vec3(1.0f, -0.35f, -1.0f));
+		transform = glm::rotate(transform, 3.0f * 3.14f / 4.0f, glm::vec3(0, 1, 0));
+		transform = glm::rotate(transform, -3.14f/4.0f, glm::vec3(1, 0, 0));
+		transform = glm::scale(transform, glm::vec3(0.35f));
 		mesh.transform(transform);
 
 		// Add mesh triangles to the triangle list
