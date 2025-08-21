@@ -241,8 +241,6 @@ bool rayAABBIntersect(Ray r, vec3 minBounds, vec3 maxBounds, float tMin, float t
     return tFarMin >= tNearMax && tNearMax <= tMax && tFarMin >= tMin;
 }
 
-
-
 // Moeller-Trumbore Algorithm
 // [https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm]
 bool hitTriangle(Triangle triangle, Ray r, float tMin, float tMax, out HitRecord rec) {

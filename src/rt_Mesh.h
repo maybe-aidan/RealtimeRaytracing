@@ -42,22 +42,22 @@ public:
 
         for (auto& triangle : triangles) {
             // Transform vertices
-            glm::vec4 v0 = matrix * glm::vec4(triangle.v0_x, triangle.v0_y, triangle.v0_z, 1.0f);
-            glm::vec4 v1 = matrix * glm::vec4(triangle.v1_x, triangle.v1_y, triangle.v1_z, 1.0f);
-            glm::vec4 v2 = matrix * glm::vec4(triangle.v2_x, triangle.v2_y, triangle.v2_z, 1.0f);
+            glm::vec4 v0 = matrix * glm::vec4(triangle.v0.x, triangle.v0.y, triangle.v0.z, 1.0);
+            glm::vec4 v1 = matrix * glm::vec4(triangle.v1.x, triangle.v1.y, triangle.v1.z, 1.0);
+            glm::vec4 v2 = matrix * glm::vec4(triangle.v2.x, triangle.v2.y, triangle.v2.z, 1.0);
 
-            triangle.v0_x = v0.x; triangle.v0_y = v0.y; triangle.v0_z = v0.z;
-            triangle.v1_x = v1.x; triangle.v1_y = v1.y; triangle.v1_z = v1.z;
-            triangle.v2_x = v2.x; triangle.v2_y = v2.y; triangle.v2_z = v2.z;
+            triangle.v0 = v0;
+            triangle.v1 = v1;
+            triangle.v2 = v2;
 
             // Transform normals
-            glm::vec3 n0 = normalMatrix * glm::vec3(triangle.n0_x, triangle.n0_y, triangle.n0_z);
-            glm::vec3 n1 = normalMatrix * glm::vec3(triangle.n1_x, triangle.n1_y, triangle.n1_z);
-            glm::vec3 n2 = normalMatrix * glm::vec3(triangle.n2_x, triangle.n2_y, triangle.n2_z);
+            glm::vec3 n0 = normalMatrix * glm::vec3(triangle.n0.x, triangle.n0.y, triangle.n0.z);
+            glm::vec3 n1 = normalMatrix * glm::vec3(triangle.n1.x, triangle.n1.y, triangle.n1.z);
+            glm::vec3 n2 = normalMatrix * glm::vec3(triangle.n2.x, triangle.n2.y, triangle.n2.z);
 
-            triangle.n0_x = n0.x; triangle.n0_y = n0.y; triangle.n0_z = n0.z;
-            triangle.n1_x = n1.x; triangle.n1_y = n1.y; triangle.n1_z = n1.z;
-            triangle.n2_x = n2.x; triangle.n2_y = n2.y; triangle.n2_z = n2.z;
+            triangle.n0.x = n0.x; triangle.n0.y = n0.y; triangle.n0.z = n0.z;
+            triangle.n1.x = n1.x; triangle.n1.y = n1.y; triangle.n1.z = n1.z;
+            triangle.n2.x = n2.x; triangle.n2.y = n2.y; triangle.n2.z = n2.z;
         }
     }
 
@@ -140,37 +140,37 @@ private:
                         Triangle tri = {};
 
                         // Set vertices
-                        tri.v0_x = mesh.vertices[idx0].x;
-                        tri.v0_y = mesh.vertices[idx0].y;
-                        tri.v0_z = mesh.vertices[idx0].z;
-                        tri.v0_w = 0.0f;
+                        tri.v0.x = mesh.vertices[idx0].x;
+                        tri.v0.y = mesh.vertices[idx0].y;
+                        tri.v0.z = mesh.vertices[idx0].z;
+                        tri.v0.w = 0.0f;
 
-                        tri.v1_x = mesh.vertices[idx1].x;
-                        tri.v1_y = mesh.vertices[idx1].y;
-                        tri.v1_z = mesh.vertices[idx1].z;
-                        tri.v1_w = 0.0f;
+                        tri.v1.x = mesh.vertices[idx1].x;
+                        tri.v1.y = mesh.vertices[idx1].y;
+                        tri.v1.z = mesh.vertices[idx1].z;
+                        tri.v1.w = 0.0f;
 
-                        tri.v2_x = mesh.vertices[idx2].x;
-                        tri.v2_y = mesh.vertices[idx2].y;
-                        tri.v2_z = mesh.vertices[idx2].z;
-                        tri.v2_w = 0.0f;
+                        tri.v2.x = mesh.vertices[idx2].x;
+                        tri.v2.y = mesh.vertices[idx2].y;
+                        tri.v2.z = mesh.vertices[idx2].z;
+                        tri.v2.w = 0.0f;
 
                         // Set normals (use mesh normals if available, otherwise compute face normal)
                         if (!mesh.normals.empty()) {
-                            tri.n0_x = mesh.normals[idx0].x;
-                            tri.n0_y = mesh.normals[idx0].y;
-                            tri.n0_z = mesh.normals[idx0].z;
-                            tri.n0_w = 0.0f;
+                            tri.n0.x = mesh.normals[idx0].x;
+                            tri.n0.y = mesh.normals[idx0].y;
+                            tri.n0.z = mesh.normals[idx0].z;
+                            tri.n0.w = 0.0f;
 
-                            tri.n1_x = mesh.normals[idx1].x;
-                            tri.n1_y = mesh.normals[idx1].y;
-                            tri.n1_z = mesh.normals[idx1].z;
-                            tri.n1_w = 0.0f;
+                            tri.n1.x = mesh.normals[idx1].x;
+                            tri.n1.y = mesh.normals[idx1].y;
+                            tri.n1.z = mesh.normals[idx1].z;
+                            tri.n1.w = 0.0f;
 
-                            tri.n2_x = mesh.normals[idx2].x;
-                            tri.n2_y = mesh.normals[idx2].y;
-                            tri.n2_z = mesh.normals[idx2].z;
-                            tri.n2_w = 0.0f;
+                            tri.n2.x = mesh.normals[idx2].x;
+                            tri.n2.y = mesh.normals[idx2].y;
+                            tri.n2.z = mesh.normals[idx2].z;
+                            tri.n2.w = 0.0f;
                         }
                         else {
                             // Compute face normal
@@ -178,24 +178,25 @@ private:
                             glm::vec3 edge2 = mesh.vertices[idx2] - mesh.vertices[idx0];
                             glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
 
-                            tri.n0_x = tri.n1_x = tri.n2_x = normal.x;
-                            tri.n0_y = tri.n1_y = tri.n2_y = normal.y;
-                            tri.n0_z = tri.n1_z = tri.n2_z = normal.z;
-                            tri.n0_w = tri.n1_w = tri.n2_w = 0.0f;
+                            tri.n0.x = tri.n1.x = tri.n2.x = normal.x;
+                            tri.n0.y = tri.n1.y = tri.n2.y = normal.y;
+                            tri.n0.z = tri.n1.z = tri.n2.z = normal.z;
+                            tri.n0.w = tri.n1.w = tri.n2.w = 0.0f;
                         }
 
                         tri.materialID = defaultMaterialID;
-                        tri.cx = (tri.v0_x + tri.v1_x + tri.v2_x) / 3;
-                        tri.cy = (tri.v0_y + tri.v1_y + tri.v2_y) / 3;
-                        tri.cz = (tri.v0_z + tri.v1_z + tri.v2_z) / 3;
+                        tri.cx = (tri.v0.x + tri.v1.x + tri.v2.x) / 3;
+                        tri.cy = (tri.v0.y + tri.v1.y + tri.v2.y) / 3;
+                        tri.cz = (tri.v0.z + tri.v1.z + tri.v2.z) / 3;
 
                         triangles.push_back(tri);
                     }
                 }
             }
         }
-
+#ifdef RT_DEBUG
         std::cout << "Generated " << triangles.size() << " triangles from mesh" << std::endl;
+#endif
     }
 };
 

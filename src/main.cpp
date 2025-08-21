@@ -28,20 +28,24 @@
 //   with custom modifications for GPU-based execution and real-time rendering.
 // ============================================================================
 
+#define RT_DEBUG
+
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 #include "glad2/gl.h"
 #include "GLFW/glfw3.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../external/stb_image.h"
-#include <iostream>
-#include <vector>
+#include "../external/stb_image_write.h"
 
-#include "../includes/shader.h"
-#include "../includes/camera.h"
-#include "rt_structs.h"
-#include "rt_mesh.h"
-#include "rt_bvh.h"
+#include <chrono>
+#include <iomanip>
+
+#include "rt_includes.h"
 
 void processInput(GLFWwindow* window);
 
@@ -53,24 +57,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 // Handling Cubemap Texture Loading
 GLuint loadCubemap(const std::vector<std::string>& faces);
 GLuint loadHDRCubemap(const std::vector<std::string>& faces);
-
-const unsigned int WIDTH = 1920;
-const unsigned int HEIGHT = 1080;
-
-// Camera Setup
-Camera camera(glm::vec3(4.56854f, 0.754347f, - 3.15879f));
-float lastX = WIDTH / 2.0f;
-float lastY = HEIGHT / 2.0f;
-bool firstMouse = true;
-
-// timing
-float deltaTime = 0.0f;	// time between current frame and last frame
-float lastFrame = 0.0f;
-
-inline double random_double() {
-	// Returns a random real in [0,1).
-	return std::rand() / (RAND_MAX + 1.0);
-}
 
 // Basic window setup with GLFW and GLAD
 GLFWwindow* init(unsigned int width, unsigned int height, const char* name) {
@@ -111,6 +97,20 @@ GLFWwindow* init(unsigned int width, unsigned int height, const char* name) {
 	return window;
 }
 
+void saveScreenshot(const char* filename, int width, int height) {
+	std::vector<unsigned char> pixels(width * height * 3);
+	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+	// Flip vertically
+	for (int y = 0; y < height / 2; ++y) {
+		for (int x = 0; x < width * 3; ++x) {
+			std::swap(pixels[y * width * 3 + x], pixels[(height - 1 - y) * width * 3 + x]);
+		}
+	}
+
+	stbi_write_png(filename, width, height, 3, pixels.data(), width * 3);
+}
+
 int main() {
 	// Create GLFW window
 	GLFWwindow* window = init(WIDTH, HEIGHT, "Raytracing");
@@ -120,7 +120,7 @@ int main() {
 	shader screen_shader("src/shaders/screen_quad.vert", "src/shaders/screen_quad.frag");
 
 	// Create an array of Materials for lookup in the Shader.
-	Material mats[9] = {
+	std::vector<Material> mats = {
 		//  albedo x,   y,   z,   w,       Material Type, Emission, Fuzz, IOR
 		Material{0.7, 0.7, 0.9, 0.0, MaterialType::Metal,      0.0, 0.01, 0.0},
 		Material{0.6, 0.6, 0.6, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
@@ -136,25 +136,39 @@ int main() {
 	// Load mesh and create triangles
 	std::vector<Triangle> allTriangles;
 
+	std::vector<MeshInstance> instances(2);
+
 	// Load meshes
+
+	float meshPositions[2][3] = { 
+		{2.0f, -0.65f, -1.0f}, 
+		{1.0f, -0.35f, -1.0f} 
+	};
+	float meshRotations[2][3] = { 
+		{0.0f, 3.0f * 3.14f / 4.0f, 0.0f},
+		{0.0f, 3.0f * 3.14f / 4.0f, 0.0f},
+	};
+	float meshScales[2] = {5.0f, 0.35f};
 
 	// Bunny
 	try {
 		rt_Mesh mesh("external/smooth-bunny.obj", 8); // path, material ID (index in mats)
 
-		// Transform the mesh
-		glm::mat4 transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(2.0f, -0.65f, -1.0f));
-		transform = glm::rotate(transform, 3.0f * 3.14f / 4.0f, glm::vec3(0, 1, 0));
-		transform = glm::scale(transform, glm::vec3(5.0f));
-		mesh.transform(transform);
+		MeshInstance bunny;
+		bunny.materialID = 7;
+		bunny.originalTris = mesh.getTriangles(); // object-space
+		bunny.firstTri = allTriangles.size();
+		bunny.triCount = bunny.originalTris.size();
+		
+		bunny.position = glm::vec3(meshPositions[0][0], meshPositions[0][1], meshPositions[0][2]);
+		bunny.rotation = glm::vec3(meshRotations[0][0], meshRotations[0][1], meshRotations[0][2]);
+		bunny.scale = glm::vec3(meshScales[0]); // your original scale
+		bunny.updateModel();
+		std::vector<Triangle> tmp;
+		ApplyTransform(bunny.originalTris, tmp, bunny.model);
+		allTriangles.insert(allTriangles.end(), tmp.begin(), tmp.end());
 
-		// Add mesh triangles to the triangle list
-		const auto& meshTriangles = mesh.getTriangles();
-		allTriangles.insert(allTriangles.end(), meshTriangles.begin(), meshTriangles.end());
-
-		// Debug stuff
-		std::cout << "Loaded mesh with " << meshTriangles.size() << " triangles" << std::endl;
+		instances[0] = bunny;
 	}
 	catch (const std::exception& e) {
 		std::cout << "Failed to load mesh: " << e.what() << std::endl;
@@ -164,20 +178,20 @@ int main() {
 	try {
 		rt_Mesh mesh("external/smooth-monkey.obj", 7); // path, material ID (index in mats)
 
-		// Transform the mesh
-		glm::mat4 transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(1.0f, -0.35f, -1.0f));
-		transform = glm::rotate(transform, 3.0f * 3.14f / 4.0f, glm::vec3(0, 1, 0));
-		transform = glm::rotate(transform, -3.14f/4.0f, glm::vec3(1, 0, 0));
-		transform = glm::scale(transform, glm::vec3(0.35f));
-		mesh.transform(transform);
+		MeshInstance monkey;
+		monkey.materialID = 7;
+		monkey.originalTris = mesh.getTriangles(); // object-space
+		monkey.firstTri = allTriangles.size();
+		monkey.triCount = monkey.originalTris.size();
 
-		// Add mesh triangles to the triangle list
-		const auto& meshTriangles = mesh.getTriangles();
-		allTriangles.insert(allTriangles.end(), meshTriangles.begin(), meshTriangles.end());
-
-		// Debug stuff
-		std::cout << "Loaded mesh with " << meshTriangles.size() << " triangles" << std::endl;
+		monkey.position = glm::vec3(meshPositions[1][0], meshPositions[1][1], meshPositions[1][2]);
+		monkey.rotation = glm::vec3(meshRotations[1][0], meshRotations[1][1], meshRotations[1][2]);
+		monkey.scale = glm::vec3(meshScales[1]);
+		monkey.updateModel();
+		std::vector<Triangle> tmp;
+		ApplyTransform(monkey.originalTris, tmp, monkey.model);
+		allTriangles.insert(allTriangles.end(), tmp.begin(), tmp.end());
+		instances[1] = monkey;
 	}
 	catch (const std::exception& e) {
 		std::cout << "Failed to load mesh: " << e.what() << std::endl;
@@ -205,6 +219,7 @@ int main() {
 	const auto& primitives = bvhBuilder.getPrimitiveIndices();
 
 	// Some BVH Debug stuff. -------------------------------------------------------------
+#ifdef RT_DEBUG
 	std::cout << "=== BVH DEBUG ===" << std::endl;
 	std::cout << "Input triangles: " << allTriangles.size() << std::endl;
 	std::cout << "BVH nodes: " << bvhNodes.size() << std::endl;
@@ -224,6 +239,7 @@ int main() {
 		std::cout << "First primitive triangle index: " << primitives[0] << std::endl;
 	}
 	std::cout << "=================" << std::endl;
+#endif
 	// End of BVH Debug ------------------------------------------------------------------
 
 	std::srand(std::time({}));
@@ -282,7 +298,7 @@ int main() {
 	GLuint matSSBO;
 	glGenBuffers(1, &matSSBO);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(mats), mats, GL_STATIC_DRAW);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, mats.size() * sizeof(Material), mats.data(), GL_STATIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, matSSBO); // binding=0 in GLSL
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
@@ -344,13 +360,21 @@ int main() {
 	try {
 		cubemapTexture = loadHDRCubemap(faces);
 		useSkybox = true;
+#ifdef RT_DEBUG
 		std::cout << "Cubemap skybox loaded successfully" << std::endl;
+#endif
 	}
 	catch (...) {
 		std::cout << "Failed to load cubemap, using procedural sky" << std::endl;
 		useSkybox = false;
 	}
 
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 430 core");
 
 	while (!glfwWindowShouldClose(window)) {
 
@@ -358,12 +382,18 @@ int main() {
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		if (!io.WantCaptureMouse) {
+			processInput(window);
+		}
+
 		// Store previous camera state
 		static glm::vec3 lastCamPos = camera.Position;
 		static glm::vec3 lastCamFront = camera.Front;
 		static glm::vec3 lastCamUp = camera.Up;
 
-		processInput(window);
 		// Detect change
 		if (camera.Position != lastCamPos || camera.Front != lastCamFront || camera.Up != lastCamUp) {
 			frameCount = 1; // reset accumulation
@@ -429,6 +459,87 @@ int main() {
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
+		bool anyMeshMoved = false;
+
+		// ImGui Rendering. Do all other rendering BEFORE this
+		ImGui::Begin("Settings");
+		ImGui::Text("Move Meshes");
+		anyMeshMoved |= ImGui::DragFloat3("Bunny Position", meshPositions[0], 0.01f);
+		anyMeshMoved |= ImGui::DragFloat3("Monkey Position", meshPositions[1], 0.01f);
+		anyMeshMoved |= ImGui::DragFloat3("Bunny Rotation", meshRotations[0], 0.01f);
+		anyMeshMoved |= ImGui::DragFloat3("Monkey Rotation", meshRotations[1], 0.01f);
+		anyMeshMoved |= ImGui::DragFloat("Bunny Scale", &meshScales[0], 0.01f);
+		anyMeshMoved |= ImGui::DragFloat("Monkey Scale", &meshScales[1], 0.01f);
+		
+		anyMeshMoved |= ImGui::DragInt("Bunny Material", &instances[0].materialID, 1.0f, 0, mats.size() - 1);
+		anyMeshMoved |= ImGui::DragInt("Monkey Material", &instances[1].materialID, 1.0f, 0, mats.size()-1);
+		
+		if (ImGui::Button("Click to Regain Mouse Control")) {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			mouse_captured = true;
+		}
+		if (ImGui::Button("Take Screenshot")) {
+			auto now = std::chrono::system_clock::now();
+			std::time_t t = std::chrono::system_clock::to_time_t(now);
+
+			// Use safe localtime
+			std::tm tm;                     // user-provided struct
+			localtime_s(&tm, &t);           // fills 'tm' safely
+
+			// Format as YYYY-MM-DD_HH-MM-SS
+			std::ostringstream ss;
+			ss << "screenshots/raytracing-"
+				<< std::put_time(&tm, "%Y-%m-%d_%H-%M-%S")
+				<< ".png";
+			std::string filename = ss.str();
+			saveScreenshot(filename.c_str(), WIDTH, HEIGHT);
+		}
+
+		if (anyMeshMoved) {
+			frameCount = 1; // reset accumulation
+
+			// also apply your existing rotations/scales as desired
+
+			// Recompute triangles in CPU memory for each moved mesh
+			int i = 0;
+			for (auto& inst : instances) {
+				inst.position =  glm::vec3(meshPositions[i][0], meshPositions[i][1], meshPositions[i][2]);
+				inst.rotation = glm::vec3(meshRotations[i][0], meshRotations[i][1], meshRotations[i][2]);
+				inst.scale = glm::vec3(meshScales[i]);
+				inst.updateModel();
+
+				// if inst changed (track flags per instance), recompute
+				std::vector<Triangle> transformed;
+				ApplyTransform(inst.originalTris, transformed, inst.model);
+
+				// Overwrite the slice in allTriangles
+				std::copy(transformed.begin(), transformed.end(), allTriangles.begin() + inst.firstTri);
+				i++;
+			}
+
+			// Push updated triangles to GPU (same buffer size, just sub-update)
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
+			glBufferSubData(GL_SHADER_STORAGE_BUFFER,
+				0,
+				allTriangles.size() * sizeof(Triangle),
+				allTriangles.data());
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+			// BVH update
+
+			bvhBuilder.refit(allTriangles); // implement bottom-up bound recompute
+			const auto& bvhNodes = bvhBuilder.getNodes();
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
+			glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
+				bvhNodes.size() * sizeof(BVHNode), bvhNodes.data());
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		}
+
+		ImGui::End();
+
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 		glfwPollEvents();
 		glfwSwapBuffers(window);
 	}
@@ -443,130 +554,10 @@ int main() {
 	if (bvhSSBO) glDeleteBuffers(1, &bvhSSBO);
 	if (primSSBO) glDeleteBuffers(1, &primSSBO);
 
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 	glfwTerminate();
 	return 0;
-}
-
-// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
-void processInput(GLFWwindow* window)
-{
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, true);
-
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		camera.ProcessKeyboard(FORWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		camera.ProcessKeyboard(BACKWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		camera.ProcessKeyboard(LEFT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		camera.ProcessKeyboard(RIGHT, deltaTime);
-}
-
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-	// Will use at some point probably
-}
-
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-	// make sure the viewport matches the new window dimensions; note that width and 
-	// height will be significantly larger than specified on retina displays.
-	glViewport(0, 0, width, height);
-}
-
-
-// glfw: whenever the mouse moves, this callback is called
-// -------------------------------------------------------
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
-{
-	float xpos = static_cast<float>(xposIn);
-	float ypos = static_cast<float>(yposIn);
-
-	if (firstMouse)
-	{
-		lastX = xpos;
-		lastY = ypos;
-		firstMouse = false;
-	}
-
-	float xoffset = xpos - lastX;
-	float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-
-	lastX = xpos;
-	lastY = ypos;
-
-	camera.ProcessMouseMovement(xoffset, yoffset);
-}
-
-// glfw: whenever the mouse scroll wheel scrolls, this callback is called
-// ----------------------------------------------------------------------
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-	// Will use at some point probably
-}
-
-GLuint loadCubemap(const std::vector<std::string>& faces) {
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-	int width, height, nrChannels;
-	for (unsigned int i = 0; i < faces.size(); i++) {
-		unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
-		if (data) {
-			GLenum format = GL_RGB;
-			if (nrChannels == 1) format = GL_RED;
-			else if (nrChannels == 3) format = GL_RGB;
-			else if (nrChannels == 4) format = GL_RGBA;
-
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-				0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-			stbi_image_free(data);
-		}
-		else {
-			std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
-			stbi_image_free(data);
-		}
-	}
-
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-	return textureID;
-}
-
-// For HDR cubemaps (.hdr files)
-GLuint loadHDRCubemap(const std::vector<std::string>& faces) {
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-	int width, height, nrChannels;
-	for (unsigned int i = 0; i < faces.size(); i++) {
-		float* data = stbi_loadf(faces[i].c_str(), &width, &height, &nrChannels, 0);
-		if (data) {
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-				0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
-			stbi_image_free(data);
-		}
-		else {
-			std::cout << "HDR Cubemap texture failed to load at path: " << faces[i] << std::endl;
-			stbi_image_free(data);
-		}
-	}
-
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-	return textureID;
 }

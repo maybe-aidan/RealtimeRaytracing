@@ -48,8 +48,9 @@ public:
 		nodes.clear();
 		primitiveIndices.clear();
 
+#ifdef RT_DEBUG
 		std::cout << "BVH build called with " << triangles.size() << " triangles" << std::endl;
-
+#endif
 		if (triangles.empty()) {
 			std::cout << "No triangles to build BVH for!" << std::endl;
 			return;
@@ -67,13 +68,19 @@ public:
 		primitiveIndices.reserve(triangles.size());
 
 		buildRecursive(primInfo, 0, primInfo.size());
-
+#ifdef RT_DEBUG
 		std::cout << "BVH built with " << nodes.size() << " nodes for "
 			<< triangles.size() << " triangles" << std::endl;
+#endif
 	}
 
 	const std::vector<BVHNode>& getNodes() const { return nodes; }
 	const std::vector<int>& getPrimitiveIndices() const { return primitiveIndices; }
+
+	void refit(const std::vector<Triangle>& triangles) {
+		if (nodes.empty()) return;
+		refitNode(0, triangles);
+	}
 
 private:
 	struct PrimInfo {
@@ -84,11 +91,51 @@ private:
 
 	static constexpr int MAX_PRIMS_IN_LEAF = 4;
 
+	AABB refitNode(int nodeIdx, const std::vector<Triangle>& triangles) {
+		BVHNode& node = nodes[nodeIdx];
+
+		if (node.leftChild < 0) { // leaf
+			const int primOffset = -node.leftChild - 1;
+			const int primCount = node.rightChild;
+
+			AABB bounds;
+			for (int i = 0; i < primCount; ++i) {
+				const int triIdx = primitiveIndices[primOffset + i];
+				// Reuse same bounding method used at build-time:
+				const Triangle& t = triangles[triIdx];
+
+				// Inline getTriangleBounds(t) to avoid private access issues:
+				AABB tb;
+				tb.expand(glm::vec3(t.v0.x, t.v0.y, t.v0.z));
+				tb.expand(glm::vec3(t.v1.x, t.v1.y, t.v1.z));
+				tb.expand(glm::vec3(t.v2.x, t.v2.y, t.v2.z));
+
+				bounds.expand(tb);
+			}
+			node.min = glm::vec4(bounds.min, 0.0f);
+			node.max = glm::vec4(bounds.max, 0.0f);
+			return bounds;
+		}
+		else {
+			// internal: combine children
+			const int L = node.leftChild;
+			const int R = node.rightChild;
+			AABB leftB = refitNode(L, triangles);
+			AABB rightB = refitNode(R, triangles);
+
+			AABB b = leftB;
+			b.expand(rightB);
+			node.min = glm::vec4(b.min, 0.0f);
+			node.max = glm::vec4(b.max, 0.0f);
+			return b;
+		}
+	}
+
 	AABB getTriangleBounds(const Triangle& tri) const {
 		AABB bounds;
-		bounds.expand(glm::vec3(tri.v0_x, tri.v0_y, tri.v0_z));
-		bounds.expand(glm::vec3(tri.v1_x, tri.v1_y, tri.v1_z));
-		bounds.expand(glm::vec3(tri.v2_x, tri.v2_y, tri.v2_z));
+		bounds.expand(tri.v0);
+		bounds.expand(tri.v1);
+		bounds.expand(tri.v2);
 		return bounds;
 	}
 
