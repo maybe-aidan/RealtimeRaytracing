@@ -4,7 +4,7 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 
 **Author**: Aidan Fox  
 
-![](screenshots/gamma_corrected_mirror_monkey.png)
+![](screenshots/metal-meshes.png)
 
 ---
 
