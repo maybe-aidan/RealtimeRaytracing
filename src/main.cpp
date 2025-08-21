@@ -155,7 +155,7 @@ int main() {
 		rt_Mesh mesh("external/smooth-bunny.obj", 8); // path, material ID (index in mats)
 
 		MeshInstance bunny;
-		bunny.materialID = 7;
+		bunny.materialID = 8;
 		bunny.originalTris = mesh.getTriangles(); // object-space
 		bunny.firstTri = allTriangles.size();
 		bunny.triCount = bunny.originalTris.size();
@@ -385,9 +385,7 @@ int main() {
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		if (!io.WantCaptureMouse) {
-			processInput(window);
-		}
+		processInput(window);
 
 		// Store previous camera state
 		static glm::vec3 lastCamPos = camera.Position;
@@ -461,8 +459,12 @@ int main() {
 
 		bool anyMeshMoved = false;
 
+		int fps = 1 / deltaTime;
+		std::string fps_label = "FPS: " + std::to_string(fps);
+
 		// ImGui Rendering. Do all other rendering BEFORE this
 		ImGui::Begin("Settings");
+		ImGui::Text(fps_label.c_str());
 		ImGui::Text("Move Meshes");
 		anyMeshMoved |= ImGui::DragFloat3("Bunny Position", meshPositions[0], 0.01f);
 		anyMeshMoved |= ImGui::DragFloat3("Monkey Position", meshPositions[1], 0.01f);

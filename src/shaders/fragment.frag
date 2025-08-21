@@ -517,8 +517,37 @@ Ray getRay(vec2 fragCoord){
 void main() {
     vec2 uv = gl_FragCoord.xy / resolution;
 
-    Ray r = getRay(gl_FragCoord.xy);
+    // Reduce the work per frame as accumulation happens
+    // Early frames contirbute a lot to noise reduction, but
+    // later frames have diminishing returns. We can skip
+    // some pixels to save performance, while still letting 
+    // the image converge eventually.
+
+    float C = 60.0; // Tuning constant that controls the rate 
+                    // at which subsampling kicks in.
+    // Smaller C -> skip pixels earlier (faster, noisier).
+    // Larger C -> skip pixels later (slower, cleaner).
+
+
+    // The skip factor grows logarithmically with frameCount.
+    // Example: if frameCount = C, skipFactor = 1 (shade all pixels).
+    // If frameCount = 2C, skipFactor = 1.
+    // If frameCount = 4C, skipFactor = 2 (shade every other pixel).
+    // If frameCount = 8C, skipFactor = 3 (shade every 3rd pixel).
+    int skipFactor = max(1, int(log2(float(frameCount) / C)));
+    ivec2 coord = ivec2(gl_FragCoord.xy);
     
+    // Subsample the image by skipping some pixels based on their position.
+    // This is deterministic, but due to the changining nature of skipFactor,
+    // appears to be pretty much random, ensuring we don't have any weird
+    // grids of alternating high fidelity and low fidelity.
+    if (coord.x % skipFactor != 0 || coord.y % skipFactor != 0) {
+        fragColor = vec4(texture(u_accumulationTex, uv).rgb, 1.0);
+        return;
+    }
+
+    // The actual raytracing.
+    Ray r = getRay(gl_FragCoord.xy);
     vec3 newSample = rayColor(r, 50, gl_FragCoord.xy);
     vec3 accumulated = texture(u_accumulationTex, uv).rgb * float(frameCount - 1);
 

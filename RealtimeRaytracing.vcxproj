@@ -163,6 +163,8 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="includes\camera.h" />
     <ClInclude Include="includes\shader.h" />
+    <ClInclude Include="src\includes\camera.h" />
+    <ClInclude Include="src\includes\shader.h" />
     <ClInclude Include="src\rt_includes.h" />
     <ClInclude Include="src\rt_input.h" />
     <ClInclude Include="src\rt_skybox.h" />
