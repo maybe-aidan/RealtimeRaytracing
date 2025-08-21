@@ -34,6 +34,7 @@ struct AABB {
 	}
 };
 
+
 // A BVH is an acceleration structure that recursively splits a mesh or 
 // scene into smaller nodes containing less geometry. The idea here is 
 // to be able to discard as much geometry as possble per ray, in order 

@@ -24,11 +24,22 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 
 | Glass & Refraction | BVH Triangle Mesh | Skybox Environment | 
 |--------------------|-------------------|--------------------|
-| ![](screenshots/Realtime_image1.png) | ![](screenshots/no_gamma.png) | ![](screenshots/skybox_render2.png) |
+| ![](screenshots/Realtime_image1.png) | ![](screenshots/brass-monkey.png) | ![](screenshots/skybox_render2.png) |
 
 | Gamma-Correction | No Gamma-Correction |
 |------------------|---------------------|
 | ![](screenshots/gamma_correction.png) | ![](screenshots/no_gamma.png) |
+
+### Post Triangle Intersection and Normal Interpolation Fix for Meshes
+
+| Glass Bunny | Brass Bunny |
+|-------------|-------------|
+| ![](screenshots/glass-bunny.png) | ![](screenshots/brass-bunny.png) |
+
+| Glass Monkey | Brass Monkey |
+|-------------|-------------|
+| ![](screenshots/glass-monkey.png) | ![](screenshots/brass-monkey.png) |
+
 ---
 
 ## 🛠️ Build Instructions  

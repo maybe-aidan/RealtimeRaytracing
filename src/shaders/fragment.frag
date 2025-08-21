@@ -19,7 +19,7 @@ uniform bool u_useSkybox;
 
 // Some Constants
 #define PI 3.1415926535896932385
-#define MAX_OBJECTS 64
+#define MAX_OBJECTS 1024
 const float infinity = 1.0 / 0.0;
 
 // Global Seed for our random functions. 
@@ -124,16 +124,24 @@ struct HitRecord {
 
 // Determines behavior of ray after hitting certain materials.
 bool scatter(Ray rayIn, HitRecord rec, out vec3 attenuation, out Ray scattered) {
+    // Use a distance-adaptive epsilon for ray origins
+    float shadowEpsilon = max(1e-4, abs(rec.t) * 1e-6);
+    
     if (rec.mat.type == MATERIAL_LAMBERTIAN) {
         vec3 scatterDir = random_on_hemisphere(rec.normal, seed);
         if (nearZero(scatterDir)) scatterDir = rec.normal;
-        scattered = Ray(rec.p + rec.normal * 0.01, scatterDir);
+        
+        // Start the ray slightly above the surface
+        scattered = Ray(rec.p + rec.normal * shadowEpsilon, scatterDir);
         attenuation = rec.mat.albedo.rgb;
         return true;
     } 
     else if (rec.mat.type == MATERIAL_METAL) {
         vec3 reflected = reflect(normalize(rayIn.direction), rec.normal);
-        scattered = Ray(rec.p, reflected + rec.mat.fuzz * randomUnitVector(seed));
+        vec3 fuzzedDirection = reflected + rec.mat.fuzz * randomUnitVector(seed);
+        
+        // Start the ray slightly above the surface
+        scattered = Ray(rec.p + rec.normal * shadowEpsilon, fuzzedDirection);
         attenuation = rec.mat.albedo.rgb;
         return dot(scattered.direction, rec.normal) > 0.0;
     }
@@ -145,22 +153,28 @@ bool scatter(Ray rayIn, HitRecord rec, out vec3 attenuation, out Ray scattered) 
 
         bool cannotRefract = refractionRatio * sinTheta > 1.0;
         vec3 direction;
-        if (cannotRefract || reflectance(cosTheta, refractionRatio) > rand(seed))
+        vec3 rayOrigin;
+        
+        if (cannotRefract || reflectance(cosTheta, refractionRatio) > rand(seed)) {
             direction = reflect(unitDir, rec.normal);
-        else
+            rayOrigin = rec.p + rec.normal * shadowEpsilon; // Above surface for reflection
+        } else {
             direction = refract(unitDir, rec.normal, refractionRatio);
+            rayOrigin = rec.p - rec.normal * shadowEpsilon; // Below surface for refraction
+        }
 
-        scattered = Ray(rec.p, direction);
-        attenuation = vec3(1.0); // Glass absorbs nothing here
+        scattered = Ray(rayOrigin, direction);
+        attenuation = vec3(1.0);
         return true;
     }
     else if (rec.mat.type == MATERIAL_EMISSIVE) {
         attenuation = rec.mat.albedo.rgb * rec.mat.emissionStrength;
-        return false; // Light sources don’t scatter
+        return false;
     }
 
     return false;
 }
+
 
 void setFaceNormal(inout HitRecord rec, Ray r, vec3 outwardNormal){
     rec.frontFace = dot(r.direction, outwardNormal) < 0.0;
@@ -170,14 +184,14 @@ void setFaceNormal(inout HitRecord rec, Ray r, vec3 outwardNormal){
 // Primitives
 
 struct Triangle {
-    vec4 pointA; // w is unused for all these vec4's. Only exists for memory alignment
-    vec4 pointB;
-    vec4 pointC;
-    vec4 normalA;
-    vec4 normalB;
-    vec4 normalC;
+    vec4 v0; // w is unused for all these vec4's. Only exists for memory alignment
+    vec4 v1;
+    vec4 v2;
+    vec4 n0;
+    vec4 n1;
+    vec4 n2;
     int materialID;
-    float pad1, pad2, pad3;  // For memory alignment.
+    float cx, cy, cz;  // Centroid.
 };
 
 // The Triangles SSBO
@@ -197,31 +211,24 @@ layout(std430, binding = 2) buffer Spheres{
     Sphere spheres[];
 };
 
-// Types of "hittables"
-#define HITTABLE_SPHERE 0
-#define HITTABLE_TRIANGLE 1
-
-struct Hittable {
-    int type;
-    int index; // index into the array of the respective type.
-};
-
-Hittable hittables[MAX_OBJECTS*2];
-int hittableCount = 0;
-
 // Smooths out sharper edges. (Supposedly)
 vec3 averageNormal(Triangle t){
-    return normalize(t.normalA.xyz + t.normalB.xyz + t.normalC.xyz);
+    return normalize(t.n0.xyz + t.n1.xyz + t.n2.xyz);
 }
 
 // Maintains surface detail from sharp edges.
 vec3 faceNormal(Triangle t) {
-    return normalize(cross(t.pointB.xyz - t.pointA.xyz, t.pointC.xyz - t.pointA.xyz));
+    return normalize(cross(t.v1.xyz - t.v0.xyz, t.v2.xyz - t.v0.xyz));
 }
 
 // Detects an intersection with an AABB.
 bool rayAABBIntersect(Ray r, vec3 minBounds, vec3 maxBounds, float tMin, float tMax){
-    vec3 invDir = 1.0 / r.direction;
+    vec3 dir = r.direction;
+    vec3 invDir = vec3(
+        (abs(dir.x) > 1e-20) ? 1.0/dir.x : 1e20,
+        (abs(dir.y) > 1e-20) ? 1.0/dir.y : 1e20,
+        (abs(dir.z) > 1e-20) ? 1.0/dir.z : 1e20
+    );
     vec3 t0 = (minBounds - r.origin) * invDir;
     vec3 t1 = (maxBounds - r.origin) * invDir;
 
@@ -234,55 +241,53 @@ bool rayAABBIntersect(Ray r, vec3 minBounds, vec3 maxBounds, float tMin, float t
     return tFarMin >= tNearMax && tNearMax <= tMax && tFarMin >= tMin;
 }
 
+
+
 // Moeller-Trumbore Algorithm
 // [https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm]
 bool hitTriangle(Triangle triangle, Ray r, float tMin, float tMax, out HitRecord rec) {
-    const float EPSILON = 1e-5;
-    vec3 edge1 = triangle.pointB.xyz - triangle.pointA.xyz;
-    vec3 edge2 = triangle.pointC.xyz - triangle.pointA.xyz;
-    vec3 ray_cross_e2 = cross(r.direction, edge2); // perpendicular to both the ray direction and the edge of the triangle.
-    float det = dot(edge1, ray_cross_e2); // 0.0 if ray_cross_e2 is perpendicular to edge1, only possible if the ray is parallel to the triangle.
+    vec3 edge1 = triangle.v1.xyz - triangle.v0.xyz;
+    vec3 edge2 = triangle.v2.xyz - triangle.v0.xyz;
+    
+    float area = length(cross(edge1, edge2)) * 0.5;
+    float EPSILON = max(1e-8, area * 1e-5);
+    vec3 ray_cross_e2 = cross(r.direction, edge2);
+    float det = dot(edge1, ray_cross_e2);
     
     if(abs(det) < EPSILON) return false;
-
-    // Now we need to find t, u, v to satisfy the equation:
-    // O + tD = A + u(B-A) + v(C-A)
-    // O - A = -tD + u(B-A) + v(C-A)
-
-    // solving for u
+    
     float inv_det = 1.0 / det;
-    vec3 s = r.origin - triangle.pointA.xyz;
+    vec3 s = r.origin - triangle.v0.xyz;
     float u = inv_det * dot(s, ray_cross_e2);
-
+    
     if(u < -EPSILON || u > 1.0 + EPSILON) return false;
-
-    // Solve for v
+    
     vec3 s_cross_e1 = cross(s, edge1);
     float v = inv_det * dot(r.direction, s_cross_e1);
-
-    if(v < -EPSILON || (u+v) > 1.0 + EPSILON) return false;
-
-    // Solve for t
+    
+    if(v < -EPSILON || u + v > 1.0 + EPSILON) return false;
+    
     float t = inv_det * dot(edge2, s_cross_e1);
-
-    if(t > EPSILON){
-        if(t < tMin || t > tMax) return false;
-        rec.t = t;
-        rec.p = r.origin + r.direction * t;
-        rec.mat = materials[triangle.materialID];
-        vec3 computedNormal = averageNormal(triangle);
-
-        if(rec.mat.type == MATERIAL_DIELECTRIC) {
-            rec.frontFace = true;
-            rec.normal = dot(computedNormal, r.direction) < 0.0 ? computedNormal : -computedNormal;
-        }else{
-            rec.frontFace = dot(r.direction, computedNormal) < 0.0;
-            rec.normal = rec.frontFace ? computedNormal : -computedNormal;
-        }
-
-        return true;
-    }
-    return false;
+    
+    if(t < tMin || t > tMax) return false;
+    
+    rec.t = t;
+    rec.p = r.origin + r.direction * t;
+    rec.mat = materials[triangle.materialID];
+    
+    // Interpolated normals don't seem to work at the moment.
+//    vec3 interpolatedNormal = normalize(
+//        (1.0 - u - v) * triangle.n0.xyz +
+//        u * triangle.n1.xyz +
+//        v * triangle.n2.xyz
+//    );
+    
+    // Properly determine front/back face
+    vec3 geometricNormal = normalize(cross(edge1, edge2));
+    rec.frontFace = dot(r.direction, geometricNormal) < 0.0;
+    rec.normal = rec.frontFace ? geometricNormal : -geometricNormal;
+    
+    return true;
 }
 
 // Sphere intersection algorithm.
@@ -368,31 +373,29 @@ bool hitWorldBVH(Ray r, float tMin, float tMax, out HitRecord rec){
 // In case something breaks in bvh transfer - the original, slow approach.
 bool hitWorldBruteForce(Ray r, float tMin, float tMax, out HitRecord rec) {
     HitRecord tempRec;
-    bool hit_anything = false;
-    float closest_so_far = tMax;
+    bool hitAnything = false;
+    float closestSoFar = tMax;
 
-    // Loops though all hittables and checks for intersection based on type.
-    for(int i = 0; i < hittableCount; i++){
-        Hittable h = hittables[i];
-        bool hit = false;
-
-        if(h.type == HITTABLE_SPHERE) {
-            Sphere s = spheres[h.index];
-            hit = hitSphere(s, r, tMin, closest_so_far, tempRec);
-        }
-        else if(h.type == HITTABLE_TRIANGLE) {
-            Triangle t = triangles[h.index];
-            hit = hitTriangle(t, r, tMin, closest_so_far, tempRec);
-        }
-
-        if(hit) {
-            hit_anything = true;
-            closest_so_far = tempRec.t;
+    // Test all triangles directly
+    for(int i = 0; i < triangles.length(); i++){
+        Triangle tri = triangles[i];
+        if(hitTriangle(tri, r, tMin, closestSoFar, tempRec)){
+            hitAnything = true;
+            closestSoFar = tempRec.t;
             rec = tempRec;
         }
     }
-    
-    return hit_anything;
+
+    // Test all spheres directly
+    for(int i = 0; i < spheres.length(); i++){
+        if(hitSphere(spheres[i], r, tMin, closestSoFar, tempRec)){
+            hitAnything = true;
+            closestSoFar = tempRec.t;
+            rec = tempRec;
+        }
+    }
+
+    return hitAnything;
 }
 
 // Essentially a helper function to perform the BVH search and the sphere intersection search simultaneously.
@@ -449,30 +452,24 @@ vec3 GainSkyBoxLight(Ray ray) {
 // scattering object's albedo, until it reaches the skybox, or has 
 // bounced enough to lose all color,
 vec3 rayColor(Ray r, int maxBounces, vec2 fragCoord){
-    vec3 accumulatedColor = vec3(1.0); // keeps track of throughput
+    vec3 accumulatedColor = vec3(1.0);
     vec3 brightnessScore = vec3(0.0);
-    vec3 finalColor = vec3(0.0);
-
+    
     for (int bounce = 0; bounce < maxBounces; ++bounce) {
         HitRecord rec;
-        if (hitWorld(r, 0.01, infinity, rec)) {
-            // Scatter ray in random hemisphere
+        if (hitWorld(r, 1e-6, infinity, rec)) {
             seed = fragCoord + vec2(frameCount, time);
 
             vec3 attenuation;
             Ray scattered;
-
-            // scatter returns true if the ray continues, false if it hits light
             bool didScatter = scatter(r, rec, attenuation, scattered);
 
-            // accumulate emitted light
             brightnessScore += rec.mat.albedo.rgb * rec.mat.emissionStrength * accumulatedColor;
 
             if (!didScatter) {
-                break; // material is emissive; terminate ray
+                break;
             }
 
-            // update throughput and ray
             accumulatedColor *= attenuation;
             r = scattered;
 
@@ -482,7 +479,6 @@ vec3 rayColor(Ray r, int maxBounces, vec2 fragCoord){
         }
     }
 
-    // gamma correction.
     return linearToGamma(brightnessScore);
 }
 
@@ -520,27 +516,8 @@ Ray getRay(vec2 fragCoord){
     return r;
 }
 
-// Populates the hittable array with the Spheres and Triangles passed into the shader.
-void loadHittables(){
-    hittableCount = 0;
-    int s_length = spheres.length();
-    int t_length = triangles.length();
-    for(int i = 0; i < s_length; i++){
-        hittables[hittableCount].type = HITTABLE_SPHERE;
-        hittables[hittableCount].index = i;
-        hittableCount++;
-    }
-    for(int i = 0 ; i < t_length; i++){
-        hittables[hittableCount].type = HITTABLE_TRIANGLE;
-        hittables[hittableCount].index = i;
-        hittableCount++;
-    }
-}
-
 void main() {
     vec2 uv = gl_FragCoord.xy / resolution;
-    
-    loadHittables();
 
     Ray r = getRay(gl_FragCoord.xy);
     

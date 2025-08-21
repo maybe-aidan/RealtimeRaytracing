@@ -126,10 +126,10 @@ int main() {
 		Material{0.6, 0.6, 0.6, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
 		Material{1.0, 0.8, 0.6, 0.0, MaterialType::Emissive,   1.0, 0.0,  0.0},
 		Material{1.0, 0.9, 0.6, 0.0, MaterialType::Emissive,   1.0, 0.0,  0.0},
-		Material{1.0, 1.0, 1.0, 0.0, MaterialType::Dielectric, 0.0, 0.0,  1.5},
+		Material{1.0, 1.0, 1.0, 0.0, MaterialType::Dielectric, 0.0, 0.0,  1.5}, // Glass
 		Material{1.0, 0.8, 1.0, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
 		Material{0.7, 0.7, 0.7, 0.0, MaterialType::Metal,      0.0, 0.5,  0.0},
-		Material{0.8, 0.6, 0.2, 0.0, MaterialType::Metal,      0.0, 0.01, 0.0},
+		Material{0.8, 0.6, 0.2, 0.0, MaterialType::Metal,      0.0, 0.00, 0.0}, // Brass
 		Material{0.8, 0.6, 0.8, 0.0, MaterialType::Metal,      0.0, 0.0,  0.0}
 	}; // Note: albedo.w is for memory alignment, and is unused in the shader.
 
@@ -138,13 +138,14 @@ int main() {
 
 	// Load mesh
 	try {
-		rt_Mesh mesh("external/suzanne.obj", 8); // path, material ID (index in mats)
+		rt_Mesh mesh("external/smooth-bunny.obj", 7); // path, material ID (index in mats)
 
 		// Transform the mesh
 		glm::mat4 transform = glm::mat4(1.0f);
-		transform = glm::translate(transform, glm::vec3(1.5f, 0.0, -1.5f));
-		transform = glm::rotate(transform, 3.14f/2.0f, glm::vec3(0, 1, 0));
-		transform = glm::scale(transform, glm::vec3(0.2f));
+		transform = glm::translate(transform, glm::vec3(2.0f, -0.65f, -1.0f));
+		transform = glm::rotate(transform, 3.0f * 3.14f / 4.0f, glm::vec3(0, 1, 0));
+		//transform = glm::rotate(transform, -3.14f/4.0f, glm::vec3(1, 0, 0));
+		transform = glm::scale(transform, glm::vec3(5.0f));
 		mesh.transform(transform);
 
 		// Add mesh triangles to the triangle list
@@ -161,10 +162,10 @@ int main() {
 	// Spheres setup
 	Sphere spheres[7] = {
 		Sphere{0.0,    0.0,  -1.0, 0.0, 0.5,   0, 0, 0},
-		Sphere{0.0, -100.5,  -1.0, 0.0, 100.0, 7, 0, 0},
-		Sphere{-3.0,   0.0,   0.0, 0.0, 0.5,   2, 0, 0},
-		Sphere{3.0,    0.5,  0.75, 0.0, 1.2,   3, 0, 0},
-		Sphere{2.0,  -0.25, -0.25, 0.0, 0.25,  4, 0, 0},
+		Sphere{0.0, -100.5,  -1.0, 0.0, 100.0, 1, 0, 0},
+		Sphere{-3.0,   0.0,   0.0, 0.0, 0.2,   2, 0, 0},
+		Sphere{3.0,    0.5,  0.75, 0.0, 0.5,   3, 0, 0},
+		//Sphere{2,  -0.25, -0.25, 0.0, 0.25,  4, 0, 0},
 		Sphere{1.0,    0.5,   3.5, 0.0, 3.0,   0, 0, 0}
 		//Sphere{0.0,   15.0,   0.0, 0.0, 10.0,  2, 0, 0}
 	};
@@ -317,7 +318,7 @@ int main() {
 	bool useSkybox = false;
 
 	try {
-		cubemapTexture = loadCubemap(faces);
+		cubemapTexture = loadHDRCubemap(faces);
 		useSkybox = true;
 		std::cout << "Cubemap skybox loaded successfully" << std::endl;
 	}
