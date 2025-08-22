@@ -53,6 +53,7 @@ struct BVHNode {
 static_assert(sizeof(BVHNode) == 48, "BVHNode must be 48 bytes");
 
 struct MeshInstance {
+    std::string name;
     size_t firstTri = 0;
     size_t triCount = 0;
     glm::mat4 model = glm::mat4(1.0f);

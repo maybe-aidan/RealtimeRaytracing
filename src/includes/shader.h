@@ -13,6 +13,8 @@
 class shader {
 public:
 	unsigned int ID;
+    
+    shader() { std::cout << "Empty Shader Object Created." << std::endl; }
 
 	shader(const char* vertex_path, const char* fragment_path) {
         std::string vertexCode;
@@ -87,6 +89,7 @@ public:
         if (!success) {
             glGetProgramInfoLog(ID, 512, NULL, infoLog);
             std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+            std::cout << "AT VERTEX: " << vertex_path << "\nFRAGMENT: " << fragment_path << std::endl;
         }
 
         glDeleteShader(vertex);

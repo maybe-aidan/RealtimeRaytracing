@@ -16,7 +16,8 @@ uniform float camFov;
 // Skybox Uniforms
 uniform samplerCube u_skybox;
 uniform bool u_useSkybox;
-uniform sampler2D equirectangularMap;
+uniform float skyboxIntensity;
+uniform float maxIntensity;
 
 // Some Constants
 #define PI 3.1415926535896932385
@@ -427,19 +428,19 @@ bool hitWorld(Ray r, float tMin, float tMax, out HitRecord rec){
 vec3 GainSkyBoxLight(Ray ray) {
     if(u_useSkybox){
         vec3 skyColor = texture(u_skybox, ray.direction).rgb;
+        
+        // Add intensity control for HDR skybox
+        skyColor *= skyboxIntensity;
+        
+        // Clamp extremely bright values (like the sun) to prevent artifacts
+        skyColor = min(skyColor, vec3(maxIntensity));
+        
         return skyColor;
     }else{
         vec3 unitDir = normalize(ray.direction);
         float t = 0.5 * (unitDir.y + 1.0); // blend factor
         return mix(vec3(0.0), vec3(0.5, 0.7, 1.0) * 0.5, t);
     }
-}
-
-vec3 sampleSphereicalSkybox(Ray ray) {
-    float theta = atan(ray.direction.z, ray.direction.x);
-    float phi = asin(ray.direction.y);
-    vec2 uv = vec2(theta / (2.0 * 3.14159265) + 0.5, phi / 3.14159265 + 0.5);
-    return texture(equirectangularMap, uv).rgb;
 }
 
 // The real driver function of the whole algorithm.
@@ -521,7 +522,7 @@ void main() {
     // some pixels to save performance, while still letting 
     // the image converge eventually.
 
-    float C = 60.0; // Tuning constant that controls the rate 
+    float C = 120.0; // Tuning constant that controls the rate 
                     // at which subsampling kicks in.
     // Smaller C -> skip pixels earlier (faster, noisier).
     // Larger C -> skip pixels later (slower, cleaner).

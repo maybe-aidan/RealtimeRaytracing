@@ -107,6 +107,9 @@
     <ClInclude Include="src\includes\shader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\equirectToCubemap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\shaders\fullscreen.vert" />
@@ -114,5 +117,7 @@
     <None Include="src\shaders\bloom_extract.frag" />
     <None Include="src\shaders\blur.frag" />
     <None Include="src\shaders\composite.frag" />
+    <None Include="src\shaders\equirectToCubemap.frag" />
+    <None Include="src\shaders\projection.vert" />
   </ItemGroup>
 </Project>

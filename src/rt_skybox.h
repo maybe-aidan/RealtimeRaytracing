@@ -92,4 +92,65 @@ GLuint loadHDRCubemap(const std::vector<std::string>& faces) {
     return textureID;
 }
 
+GLuint loadHDRTexture(std::string filename) {
+    // Enable HDR loading in stb_image
+    stbi_set_flip_vertically_on_load(true);
+
+    int width, height, nrComponents;
+    float* data = stbi_loadf(filename.c_str(), &width, &height, &nrComponents, 0);
+
+    if (!data) {
+        std::cerr << "Failed to load HDR image: " << filename << std::endl;
+        std::cerr << "STB Error: " << stbi_failure_reason() << std::endl;
+        return 0;
+    }
+
+    std::cout << "Loaded HDR image: " << width << "x" << height
+        << " with " << nrComponents << " components" << std::endl;
+
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    // Determine internal format based on number of components
+    GLenum internalFormat, dataFormat;
+    switch (nrComponents) {
+    case 1:
+        internalFormat = GL_R32F;
+        dataFormat = GL_RED;
+        break;
+    case 2:
+        internalFormat = GL_RG32F;
+        dataFormat = GL_RG;
+        break;
+    case 3:
+        internalFormat = GL_RGB32F;
+        dataFormat = GL_RGB;
+        break;
+    case 4:
+        internalFormat = GL_RGBA32F;
+        dataFormat = GL_RGBA;
+        break;
+    default:
+        std::cerr << "Unsupported number of components: " << nrComponents << std::endl;
+        stbi_image_free(data);
+        return 0;
+    }
+
+    // Upload texture data
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0,
+        dataFormat, GL_FLOAT, data);
+
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Free image data
+    stbi_image_free(data);
+
+    return textureID;
+}
+
 #endif

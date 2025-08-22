@@ -163,6 +163,7 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="includes\camera.h" />
     <ClInclude Include="includes\shader.h" />
+    <ClInclude Include="src\equirectToCubemap.h" />
     <ClInclude Include="src\includes\camera.h" />
     <ClInclude Include="src\includes\shader.h" />
     <ClInclude Include="src\rt_includes.h" />
@@ -176,8 +177,10 @@
     <None Include="src\shaders\bloom_extract.frag" />
     <None Include="src\shaders\blur.frag" />
     <None Include="src\shaders\composite.frag" />
+    <None Include="src\shaders\equirectToCubemap.frag" />
     <None Include="src\shaders\fragment.frag" />
     <None Include="src\shaders\fullscreen.vert" />
+    <None Include="src\shaders\projection.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

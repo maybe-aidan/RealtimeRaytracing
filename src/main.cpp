@@ -46,6 +46,7 @@
 #include <iomanip>
 
 #include "rt_includes.h"
+#include "equirectToCubemap.h"
 
 void processInput(GLFWwindow* window);
 
@@ -150,27 +151,28 @@ int main() {
 		{0.0f, 3.0f * 3.14f / 4.0f, 0.0f},
 		{0.0f, 3.0f * 3.14f / 4.0f, 0.0f},
 	};
-	float meshScales[2] = {5.0f, 0.35f};
+	float meshScales[2] = {0.0f, 0.35f};
 
 	// Bunny
 	try {
-		rt_Mesh mesh("external/smooth-bunny.obj", 8); // path, material ID (index in mats)
+		rt_Mesh mesh("external/box.obj", 8); // path, material ID (index in mats)
 
-		MeshInstance bunny;
-		bunny.materialID = 8;
-		bunny.originalTris = mesh.getTriangles(); // object-space
-		bunny.firstTri = allTriangles.size();
-		bunny.triCount = bunny.originalTris.size();
+		MeshInstance meshInst;
+		meshInst.name = "Box";
+		meshInst.materialID = 8;
+		meshInst.originalTris = mesh.getTriangles(); // object-space
+		meshInst.firstTri = allTriangles.size();
+		meshInst.triCount = meshInst.originalTris.size();
 		
-		bunny.position = glm::vec3(meshPositions[0][0], meshPositions[0][1], meshPositions[0][2]);
-		bunny.rotation = glm::vec3(meshRotations[0][0], meshRotations[0][1], meshRotations[0][2]);
-		bunny.scale = glm::vec3(meshScales[0]); // your original scale
-		bunny.updateModel();
+		meshInst.position = glm::vec3(meshPositions[0][0], meshPositions[0][1], meshPositions[0][2]);
+		meshInst.rotation = glm::vec3(meshRotations[0][0], meshRotations[0][1], meshRotations[0][2]);
+		meshInst.scale = glm::vec3(meshScales[0]); // your original scale
+		meshInst.updateModel();
 		std::vector<Triangle> tmp;
-		ApplyTransform(bunny.originalTris, tmp, bunny.model);
+		ApplyTransform(meshInst.originalTris, tmp, meshInst.model);
 		allTriangles.insert(allTriangles.end(), tmp.begin(), tmp.end());
 
-		instances[0] = bunny;
+		instances[0] = meshInst;
 	}
 	catch (const std::exception& e) {
 		std::cout << "Failed to load mesh: " << e.what() << std::endl;
@@ -180,20 +182,21 @@ int main() {
 	try {
 		rt_Mesh mesh("external/smooth-monkey.obj", 7); // path, material ID (index in mats)
 
-		MeshInstance monkey;
-		monkey.materialID = 7;
-		monkey.originalTris = mesh.getTriangles(); // object-space
-		monkey.firstTri = allTriangles.size();
-		monkey.triCount = monkey.originalTris.size();
+		MeshInstance meshInst;
+		meshInst.name = "Monkey";
+		meshInst.materialID = 7;
+		meshInst.originalTris = mesh.getTriangles(); // object-space
+		meshInst.firstTri = allTriangles.size();
+		meshInst.triCount = meshInst.originalTris.size();
 
-		monkey.position = glm::vec3(meshPositions[1][0], meshPositions[1][1], meshPositions[1][2]);
-		monkey.rotation = glm::vec3(meshRotations[1][0], meshRotations[1][1], meshRotations[1][2]);
-		monkey.scale = glm::vec3(meshScales[1]);
-		monkey.updateModel();
+		meshInst.position = glm::vec3(meshPositions[1][0], meshPositions[1][1], meshPositions[1][2]);
+		meshInst.rotation = glm::vec3(meshRotations[1][0], meshRotations[1][1], meshRotations[1][2]);
+		meshInst.scale = glm::vec3(meshScales[1]);
+		meshInst.updateModel();
 		std::vector<Triangle> tmp;
-		ApplyTransform(monkey.originalTris, tmp, monkey.model);
+		ApplyTransform(meshInst.originalTris, tmp, meshInst.model);
 		allTriangles.insert(allTriangles.end(), tmp.begin(), tmp.end());
-		instances[1] = monkey;
+		instances[1] = meshInst;
 	}
 	catch (const std::exception& e) {
 		std::cout << "Failed to load mesh: " << e.what() << std::endl;
@@ -345,32 +348,6 @@ int main() {
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
-
-	// Skybox setup
-	std::vector<std::string> faces{
-		"textures/skybox/right.jpg",
-		"textures/skybox/left.jpg",
-		"textures/skybox/top.jpg",
-		"textures/skybox/bottom.jpg",
-		"textures/skybox/front.jpg",
-		"textures/skybox/back.jpg"
-	};
-
-	GLuint cubemapTexture = 0;
-	bool useSkybox = false;
-
-	try {
-		cubemapTexture = loadHDRCubemap(faces);
-		useSkybox = true;
-#ifdef RT_DEBUG
-		std::cout << "Cubemap skybox loaded successfully" << std::endl;
-#endif
-	}
-	catch (...) {
-		std::cout << "Failed to load cubemap, using procedural sky" << std::endl;
-		useSkybox = false;
-	}
-
 	// Post Processing Setup
 
 	GLuint hdrFBO;
@@ -408,6 +385,20 @@ int main() {
 
 	///
 
+	// Load HDR Cubemap
+	GLuint equirectTexture = loadHDRTexture("textures/skybox/hdrSky.hdr");
+
+	EquirectToCubemap converter;
+	GLuint cubemapTexture = converter.convertToCubemap(equirectTexture, 1024);
+
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+	bool useSkybox = true;
+	float skyboxIntentsity = 1.0f;
+	float maxIntensity = 10.0f;
+		
+	//
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -415,8 +406,6 @@ int main() {
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 430 core");
-
-	// Replace your render loop with this fixed version:
 
 	while (!glfwWindowShouldClose(window)) {
 		float currentFrame = static_cast<float>(glfwGetTime());
@@ -481,6 +470,8 @@ int main() {
 		my_shader.setVec2("resolution", glm::vec2(WIDTH, HEIGHT));
 		my_shader.setFloat("time", glfwGetTime());
 		my_shader.setInt("frameCount", frameCount++);
+		my_shader.setFloat("skyboxIntensity", skyboxIntentsity);
+		my_shader.setFloat("maxIntensity", maxIntensity);
 
 		// RENDER THE RAYTRACING
 		glBindVertexArray(VAO);
@@ -550,6 +541,7 @@ int main() {
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 		// Mesh Controls
+		std::string label;
 
 		bool anyMeshMoved = false;
 		int fps = 1 / deltaTime;
@@ -557,22 +549,41 @@ int main() {
 
 		ImGui::Begin("Settings");
 		ImGui::Text(fps_label.c_str());
+
+		ImGui::Separator();
+
 		ImGui::Text("Move Meshes");
-		anyMeshMoved |= ImGui::DragFloat3("Bunny Position", meshPositions[0], 0.01f);
-		anyMeshMoved |= ImGui::DragFloat3("Monkey Position", meshPositions[1], 0.01f);
+		
+		label = instances[0].name + " Position";
+		anyMeshMoved |= ImGui::DragFloat3(label.c_str(), meshPositions[0], 0.01f);
+		label = instances[1].name + " Position";
+		anyMeshMoved |= ImGui::DragFloat3(label.c_str(), meshPositions[1], 0.01f);
 
 		ImGui::Separator();
-		anyMeshMoved |= ImGui::DragFloat3("Bunny Rotation", meshRotations[0], 0.01f);
-		anyMeshMoved |= ImGui::DragFloat3("Monkey Rotation", meshRotations[1], 0.01f);
+		label = instances[0].name + " Rotation";
+		anyMeshMoved |= ImGui::DragFloat3(label.c_str(), meshRotations[0], 0.01f);
+		label = instances[1].name + " Rotation";
+		anyMeshMoved |= ImGui::DragFloat3(label.c_str(), meshRotations[1], 0.01f);
 
 		ImGui::Separator();
-		anyMeshMoved |= ImGui::DragFloat("Bunny Scale", &meshScales[0], 0.01f);
-		anyMeshMoved |= ImGui::DragFloat("Monkey Scale", &meshScales[1], 0.01f);
+		label = instances[0].name + " Scale";
+		anyMeshMoved |= ImGui::DragFloat(label.c_str(), &meshScales[0], 0.01f);
+		label = instances[1].name + " Scale";
+		anyMeshMoved |= ImGui::DragFloat(label.c_str(), &meshScales[1], 0.01f);
 
 		ImGui::Separator();
-		anyMeshMoved |= ImGui::DragInt("Bunny Material", &instances[0].materialID, 1.0f, 0, mats.size() - 1);
-		anyMeshMoved |= ImGui::DragInt("Monkey Material", &instances[1].materialID, 1.0f, 0, mats.size() - 1);
+		label = instances[0].name + " Material";
+		anyMeshMoved |= ImGui::DragInt(label.c_str(), &instances[0].materialID, 1.0f, 0, mats.size() - 1);
+		label = instances[1].name + " Material";
+		anyMeshMoved |= ImGui::DragInt(label.c_str(), &instances[1].materialID, 1.0f, 0, mats.size() - 1);
 
+		ImGui::Separator();
+		if (ImGui::DragFloat("Skybox Intensity", &skyboxIntentsity, 0.01f, 0.05f, 10.0f)) {
+			frameCount = 1;
+		}
+		if (ImGui::DragFloat("Skybox Max Intensity", &maxIntensity, 0.01f, 1.0f, 20.0f)) {
+			frameCount = 1;
+		}
 
 		ImGui::Separator();
 

@@ -16,6 +16,8 @@ A **GPU-accelerated real-time ray tracer** written in **C++ and OpenGL**, built 
 - **Multiple primitives** – Supports spheres and triangle meshes.  
 - **Skybox rendering** – Environment lighting with cubemaps.  
 - **Material system** – Lambertian (diffuse), Metal, Dielectric (glass), and Emissive materials supported.
+- **Bloom** - Simulating the real-world effect of brightness on lenses, bloom adds a soft 'fuzz' around light sources.
+- **HDR Skyboxes** - Taking advantage of bloom, we can sample skybox images with **High Dynamic Range**, allowing for a skybox texture to better represent the Sun, and environmental lighting.
 - **Interactive GUI** - Realtime mesh position, rotation, and scale control using ImGui.  
 - **Educational focus** – Inspired by *Ray Tracing in One Weekend*, extended to real-time GPU rendering.
 
