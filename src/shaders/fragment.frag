@@ -16,6 +16,7 @@ uniform float camFov;
 // Skybox Uniforms
 uniform samplerCube u_skybox;
 uniform bool u_useSkybox;
+uniform sampler2D equirectangularMap;
 
 // Some Constants
 #define PI 3.1415926535896932385
@@ -422,16 +423,6 @@ bool hitWorld(Ray r, float tMin, float tMax, out HitRecord rec){
     }
 }
 
-// Gamma adjustment. Not sure if I love this, might revert back to normal.
-vec3 linearToGamma(vec3 linear){
-    vec3 gamma = vec3(0.0,0.0,0.0);
-    if (linear.r > 0) gamma.r = sqrt(linear.r);
-    if (linear.g > 0) gamma.g = sqrt(linear.g);
-    if (linear.b > 0) gamma.b = sqrt(linear.b);
-
-    return gamma;
-}
-
 // Sample from the skybox.
 vec3 GainSkyBoxLight(Ray ray) {
     if(u_useSkybox){
@@ -442,6 +433,13 @@ vec3 GainSkyBoxLight(Ray ray) {
         float t = 0.5 * (unitDir.y + 1.0); // blend factor
         return mix(vec3(0.0), vec3(0.5, 0.7, 1.0) * 0.5, t);
     }
+}
+
+vec3 sampleSphereicalSkybox(Ray ray) {
+    float theta = atan(ray.direction.z, ray.direction.x);
+    float phi = asin(ray.direction.y);
+    vec2 uv = vec2(theta / (2.0 * 3.14159265) + 0.5, phi / 3.14159265 + 0.5);
+    return texture(equirectangularMap, uv).rgb;
 }
 
 // The real driver function of the whole algorithm.
@@ -477,7 +475,7 @@ vec3 rayColor(Ray r, int maxBounces, vec2 fragCoord){
         }
     }
 
-    return linearToGamma(brightnessScore);
+    return brightnessScore;
 }
 
 // This is for antialiasing.

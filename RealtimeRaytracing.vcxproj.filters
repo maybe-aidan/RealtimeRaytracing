@@ -111,7 +111,8 @@
   <ItemGroup>
     <None Include="src\shaders\fullscreen.vert" />
     <None Include="src\shaders\fragment.frag" />
-    <None Include="src\shaders\screen_quad.frag" />
-    <None Include="src\shaders\screen_quad.vert" />
+    <None Include="src\shaders\bloom_extract.frag" />
+    <None Include="src\shaders\blur.frag" />
+    <None Include="src\shaders\composite.frag" />
   </ItemGroup>
 </Project>

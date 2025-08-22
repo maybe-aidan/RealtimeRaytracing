@@ -117,15 +117,17 @@ int main() {
 
 	// Create some shaders
 	shader my_shader("src/shaders/fullscreen.vert", "src/shaders/fragment.frag");
-	shader screen_shader("src/shaders/screen_quad.vert", "src/shaders/screen_quad.frag");
+	shader brightPassShader("src/shaders/fullscreen.vert", "src/shaders/bloom_extract.frag");
+	shader blurShader("src/shaders/fullscreen.vert", "src/shaders/blur.frag");
+	shader finalCompositeShader("src/shaders/fullscreen.vert", "src/shaders/composite.frag");
 
 	// Create an array of Materials for lookup in the Shader.
 	std::vector<Material> mats = {
 		//  albedo x,   y,   z,   w,       Material Type, Emission, Fuzz, IOR
 		Material{0.7, 0.7, 0.9, 0.0, MaterialType::Metal,      0.0, 0.01, 0.0},
 		Material{0.6, 0.6, 0.6, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
-		Material{1.0, 0.8, 0.6, 0.0, MaterialType::Emissive,   1.0, 0.0,  0.0},
-		Material{1.0, 0.9, 0.6, 0.0, MaterialType::Emissive,   1.0, 0.0,  0.0},
+		Material{1.0, 0.8, 0.6, 0.0, MaterialType::Emissive,   5.0, 0.0,  0.0},
+		Material{1.0, 0.9, 0.6, 0.0, MaterialType::Emissive,   3.5, 0.0,  0.0},
 		Material{1.0, 1.0, 1.0, 0.0, MaterialType::Dielectric, 0.0, 0.0,  1.5}, // Glass
 		Material{1.0, 0.8, 1.0, 0.0, MaterialType::Lambertian, 0.0, 0.0,  0.0},
 		Material{0.7, 0.7, 0.7, 0.0, MaterialType::Metal,      0.0, 0.5,  0.0},
@@ -203,7 +205,7 @@ int main() {
 		Sphere{0.0, -100.5,  -1.0, 0.0, 100.0, 1, 0, 0},
 		Sphere{-3.0,   0.0,   0.0, 0.0, 0.2,   2, 0, 0},
 		Sphere{3.0,    0.5,  0.75, 0.0, 0.5,   3, 0, 0},
-		//Sphere{2,  -0.25, -0.25, 0.0, 0.25,  4, 0, 0},
+		Sphere{2,  -0.25, -0.25, 0.0, 0.25,  4, 0, 0},
 		Sphere{1.0,    0.5,   3.5, 0.0, 3.0,   0, 0, 0}
 		//Sphere{0.0,   15.0,   0.0, 0.0, 10.0,  2, 0, 0}
 	};
@@ -369,6 +371,44 @@ int main() {
 		useSkybox = false;
 	}
 
+	// Post Processing Setup
+
+	GLuint hdrFBO;
+	glGenFramebuffers(1, &hdrFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+
+	GLuint colorBuffer;
+	glGenTextures(1, &colorBuffer);
+	glBindTexture(GL_TEXTURE_2D, colorBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBuffer, 0);
+
+
+	GLuint bloomFBO[2];
+	GLuint bloomTex[2];
+
+	glGenFramebuffers(2, bloomFBO);
+	glGenTextures(2, bloomTex);
+
+	for (int i = 0; i < 2; i++) {
+		glBindFramebuffer(GL_FRAMEBUFFER, bloomFBO[i]);
+		glBindTexture(GL_TEXTURE_2D, bloomTex[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTex[i], 0);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			std::cerr << "Bloom FBO " << i << " not complete!" << std::endl;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	///
+
+
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -376,8 +416,9 @@ int main() {
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 430 core");
 
-	while (!glfwWindowShouldClose(window)) {
+	// Replace your render loop with this fixed version:
 
+	while (!glfwWindowShouldClose(window)) {
 		float currentFrame = static_cast<float>(glfwGetTime());
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
@@ -400,28 +441,29 @@ int main() {
 			lastCamUp = camera.Up;
 		}
 
-
+		// === STEP 1: RAYTRACING PASS ===
+		// Render raytracing result to accumulation buffer
 		glBindFramebuffer(GL_FRAMEBUFFER, accumulationFBO);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, accumulationTex[writeIndex], 0);
 
-		// Make sure it's valid
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 			std::cerr << "Framebuffer incomplete!" << std::endl;
 		}
 
-		// Bind the previous frame's accumulation texture for reading in the shader
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, accumulationTex[readIndex]);
-		my_shader.setInt("u_accumulationTex", 0);
-
-		glClearColor(0.2f, 0.5f, 0.2f, 1.0);
+		glViewport(0, 0, WIDTH, HEIGHT);
+		glClearColor(0.2f, 0.0f, 0.2f, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		// Bind the previous frame's accumulation texture for reading
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, accumulationTex[readIndex]);
+
 		my_shader.use();
+		my_shader.setInt("u_accumulationTex", 0);
 
 		// Set cubemap uniforms
 		if (useSkybox && cubemapTexture != 0) {
-			glActiveTexture(GL_TEXTURE1); // Use texture unit 1 for cubemap
+			glActiveTexture(GL_TEXTURE1);
 			glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 			my_shader.setInt("u_skybox", 1);
 			my_shader.setBool("u_useSkybox", true);
@@ -430,6 +472,7 @@ int main() {
 			my_shader.setBool("u_useSkybox", false);
 		}
 
+		// Set camera uniforms
 		my_shader.setVec3("camPos", camera.Position);
 		my_shader.setVec3("camFront", camera.Front);
 		my_shader.setVec3("camRight", camera.Right);
@@ -439,43 +482,100 @@ int main() {
 		my_shader.setFloat("time", glfwGetTime());
 		my_shader.setInt("frameCount", frameCount++);
 
+		// RENDER THE RAYTRACING
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-		// Unbind FBO so we draw to screen next
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		// Swap read/write indices
+		// Swap read/write indices for accumulation
 		std::swap(readIndex, writeIndex);
 
-		// Now draw the accumulated texture to the screen
-		screen_shader.use();
+		// === STEP 2: BLOOM BRIGHT PASS ===
+		glBindFramebuffer(GL_FRAMEBUFFER, bloomFBO[0]);
+		glViewport(0, 0, WIDTH, HEIGHT);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		brightPassShader.use();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, accumulationTex[readIndex]);
-		screen_shader.setInt("u_texture", 0);
+		glBindTexture(GL_TEXTURE_2D, accumulationTex[readIndex]); // Use the newly written accumulation
+		brightPassShader.setInt("hdrTex", 0);
+		brightPassShader.setFloat("threshold", 1.0f);
 
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-		bool anyMeshMoved = false;
+		// === STEP 3: BLOOM BLUR PASSES ===
+		bool horizontal = true;
+		int blurIterations = 10;
+		int read = 0, write = 1;
 
+		for (int i = 0; i < blurIterations; i++) {
+			glBindFramebuffer(GL_FRAMEBUFFER, bloomFBO[write]);
+			glViewport(0, 0, WIDTH, HEIGHT);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			blurShader.use();
+			blurShader.setBool("horizontal", horizontal);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, bloomTex[read]);
+			blurShader.setInt("image", 0);
+
+			glBindVertexArray(VAO);
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+			horizontal = !horizontal;
+			std::swap(read, write);
+		}
+
+		// === STEP 4: FINAL COMPOSITE TO SCREEN ===
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, WIDTH, HEIGHT);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		finalCompositeShader.use();
+
+		// Bind raytraced scene
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, accumulationTex[readIndex]);
+		finalCompositeShader.setInt("hdrTex", 0);
+
+		// Bind bloom result
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, bloomTex[read]);
+		finalCompositeShader.setInt("bloomTex", 1);
+
+		finalCompositeShader.setFloat("exposure", 1.0f);
+
+		glBindVertexArray(VAO);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+		// Mesh Controls
+
+		bool anyMeshMoved = false;
 		int fps = 1 / deltaTime;
 		std::string fps_label = "FPS: " + std::to_string(fps);
 
-		// ImGui Rendering. Do all other rendering BEFORE this
 		ImGui::Begin("Settings");
 		ImGui::Text(fps_label.c_str());
 		ImGui::Text("Move Meshes");
 		anyMeshMoved |= ImGui::DragFloat3("Bunny Position", meshPositions[0], 0.01f);
 		anyMeshMoved |= ImGui::DragFloat3("Monkey Position", meshPositions[1], 0.01f);
+
+		ImGui::Separator();
 		anyMeshMoved |= ImGui::DragFloat3("Bunny Rotation", meshRotations[0], 0.01f);
 		anyMeshMoved |= ImGui::DragFloat3("Monkey Rotation", meshRotations[1], 0.01f);
+
+		ImGui::Separator();
 		anyMeshMoved |= ImGui::DragFloat("Bunny Scale", &meshScales[0], 0.01f);
 		anyMeshMoved |= ImGui::DragFloat("Monkey Scale", &meshScales[1], 0.01f);
-		
+
+		ImGui::Separator();
 		anyMeshMoved |= ImGui::DragInt("Bunny Material", &instances[0].materialID, 1.0f, 0, mats.size() - 1);
-		anyMeshMoved |= ImGui::DragInt("Monkey Material", &instances[1].materialID, 1.0f, 0, mats.size()-1);
-		
+		anyMeshMoved |= ImGui::DragInt("Monkey Material", &instances[1].materialID, 1.0f, 0, mats.size() - 1);
+
+
+		ImGui::Separator();
+
 		if (ImGui::Button("Click to Regain Mouse Control")) {
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 			mouse_captured = true;
@@ -484,11 +584,9 @@ int main() {
 			auto now = std::chrono::system_clock::now();
 			std::time_t t = std::chrono::system_clock::to_time_t(now);
 
-			// Use safe localtime
-			std::tm tm;                     // user-provided struct
-			localtime_s(&tm, &t);           // fills 'tm' safely
+			std::tm tm;
+			localtime_s(&tm, &t);
 
-			// Format as YYYY-MM-DD_HH-MM-SS
 			std::ostringstream ss;
 			ss << "screenshots/raytracing-"
 				<< std::put_time(&tm, "%Y-%m-%d_%H-%M-%S")
@@ -498,38 +596,27 @@ int main() {
 		}
 
 		if (anyMeshMoved) {
-			frameCount = 1; // reset accumulation
+			frameCount = 1;
 
-			// also apply your existing rotations/scales as desired
-
-			// Recompute triangles in CPU memory for each moved mesh
 			int i = 0;
 			for (auto& inst : instances) {
-				inst.position =  glm::vec3(meshPositions[i][0], meshPositions[i][1], meshPositions[i][2]);
+				inst.position = glm::vec3(meshPositions[i][0], meshPositions[i][1], meshPositions[i][2]);
 				inst.rotation = glm::vec3(meshRotations[i][0], meshRotations[i][1], meshRotations[i][2]);
 				inst.scale = glm::vec3(meshScales[i]);
 				inst.updateModel();
 
-				// if inst changed (track flags per instance), recompute
 				std::vector<Triangle> transformed;
 				ApplyTransform(inst.originalTris, transformed, inst.model);
-
-				// Overwrite the slice in allTriangles
 				std::copy(transformed.begin(), transformed.end(), allTriangles.begin() + inst.firstTri);
 				i++;
 			}
 
-			// Push updated triangles to GPU (same buffer size, just sub-update)
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
-			glBufferSubData(GL_SHADER_STORAGE_BUFFER,
-				0,
-				allTriangles.size() * sizeof(Triangle),
-				allTriangles.data());
+			glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
+				allTriangles.size() * sizeof(Triangle), allTriangles.data());
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-			// BVH update
-
-			bvhBuilder.refit(allTriangles); // implement bottom-up bound recompute
+			bvhBuilder.refit(allTriangles);
 			const auto& bvhNodes = bvhBuilder.getNodes();
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
 			glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
@@ -538,7 +625,6 @@ int main() {
 		}
 
 		ImGui::End();
-
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
